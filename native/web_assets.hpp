@@ -1,0 +1,583 @@
+#pragma once
+namespace ps5nm {
+inline constexpr char kIndexHtml[] = R"PS5NMHTML(<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>PS5 Network Mounting · ProsperoMgr Control Panel</title>
+<style>
+:root {
+  color-scheme: dark;
+  --color-bg: #0a0e16;
+  --color-panel: #10161f;
+  --color-panel-2: #161e2a;
+  --color-panel-border: #24303f;
+  --color-text: #eaf1f8;
+  --color-text-dim: #8b9bad;
+  --color-accent: #2f8cff;
+  --color-accent-hover: #57a5ff;
+  --color-info: #38bdf8;
+  --color-ok: #34b168;
+  --color-warn: #eab308;
+  --color-err: #ef4444;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  background-image: radial-gradient(circle at 50% 0%, #162438 0%, #0a0e16 65%);
+  color: var(--color-text);
+  font: 15px/1.55 var(--font-sans);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+.pmgr-mono { font-family: var(--font-mono); }
+header {
+  border-bottom: 1px solid var(--color-panel-border);
+  background: rgba(16, 22, 31, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 16px clamp(16px, 4vw, 44px);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.header-inner {
+  max-width: 1140px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.brand-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2f8cff 0%, #1650a2 100%);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 20px;
+  color: #ffffff;
+  box-shadow: 0 4px 18px rgba(47, 140, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+h1 {
+  font-size: 19px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+.brand-sub {
+  margin: 2px 0 0;
+  color: var(--color-text-dim);
+  font-size: 12px;
+}
+main {
+  max-width: 1140px;
+  margin: 26px auto;
+  padding: 0 16px 40px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
+  gap: 22px;
+}
+.panel {
+  background: var(--color-panel);
+  border: 1px solid var(--color-panel-border);
+  border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.38);
+  overflow: hidden;
+}
+.panel-head {
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--color-panel-border);
+  background: rgba(22, 30, 42, 0.4);
+}
+.panel-head h2 {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+.panel-head .sub {
+  color: var(--color-text-dim);
+  font-size: 13px;
+  margin: 4px 0 0;
+}
+.panel-body {
+  padding: 22px;
+}
+label {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-dim);
+  margin-bottom: 7px;
+}
+input, select {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 8px;
+  border: 1px solid var(--color-panel-border);
+  background: var(--color-panel-2);
+  color: var(--color-text);
+  padding: 9px 13px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+input:focus, select:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(47, 140, 255, 0.22);
+}
+.field { margin-bottom: 18px; }
+.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.hint {
+  color: var(--color-text-dim);
+  font-size: 12px;
+  margin-top: 6px;
+  line-height: 1.45;
+}
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-panel-border);
+}
+button {
+  border: 0;
+  border-radius: 8px;
+  padding: 11px 18px;
+  min-height: 42px;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: background 0.18s, border-color 0.18s, transform 0.1s;
+  font-family: inherit;
+}
+button:active { transform: scale(0.98); }
+button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.btn-primary {
+  background: var(--color-accent);
+  color: #ffffff;
+  border: 1px solid rgba(47, 140, 255, 0.6);
+  box-shadow: 0 8px 22px -10px var(--color-accent);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+.btn-secondary {
+  background: var(--color-panel-2);
+  color: var(--color-text);
+  border: 1px solid var(--color-panel-border);
+}
+.btn-secondary:hover:not(:disabled) {
+  border-color: rgba(47, 140, 255, 0.4);
+  background: #1c2635;
+}
+.btn-danger {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--color-err);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.22);
+}
+.pill {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pill.neutral {
+  background: var(--color-panel-border);
+  color: var(--color-text-dim);
+}
+.pill.good {
+  background: rgba(52, 177, 104, 0.16);
+  color: var(--color-ok);
+  border: 1px solid rgba(52, 177, 104, 0.35);
+}
+.pill.bad {
+  background: rgba(239, 68, 68, 0.16);
+  color: var(--color-err);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+.pill.warn {
+  background: rgba(234, 179, 8, 0.16);
+  color: var(--color-warn);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+}
+.pmgr-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.statbox {
+  background: var(--color-panel-2);
+  border: 1px solid var(--color-panel-border);
+  border-radius: 10px;
+  padding: 6px 14px;
+}
+.statrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(36, 48, 63, 0.6);
+  font-size: 13px;
+}
+.statrow:last-child { border: 0; }
+.statrow span:first-child { color: var(--color-text-dim); font-size: 12.5px; }
+.statrow strong {
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+}
+.notice {
+  display: none;
+  margin-top: 18px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.notice.show { display: block; }
+.notice.info {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.32);
+  color: var(--color-info);
+}
+.notice.error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: var(--color-err);
+}
+.notice.ok {
+  background: rgba(52, 177, 104, 0.12);
+  border: 1px solid rgba(52, 177, 104, 0.32);
+  color: var(--color-ok);
+}
+.warning-box {
+  margin-top: 18px;
+  padding: 13px 15px;
+  border-left: 3px solid var(--color-warn);
+  background: rgba(234, 179, 8, 0.08);
+  border-radius: 0 8px 8px 0;
+  color: #dfd2b2;
+  font-size: 12px;
+  line-height: 1.5;
+}
+footer {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 0 16px 36px;
+  color: var(--color-text-dim);
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-top: 1px solid var(--color-panel-border);
+  padding-top: 20px;
+}
+@media (max-width: 780px) {
+  main { grid-template-columns: 1fr; margin-top: 16px; }
+  .two { grid-template-columns: 1fr; }
+  .panel-body { padding: 16px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <div class="brand-icon">P</div>
+      <div>
+        <h1>PS5 Network Mounting</h1>
+        <div class="brand-sub">NFS &amp; SMB FUSE Adapter · Read-Only /hostapp Target · Prospero Control</div>
+      </div>
+    </div>
+    <div class="header-status">
+      <span class="pill warn" id="statusPill"><span class="pmgr-live-dot"></span>Checking</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Remote Share Configuration</h2>
+      <p class="sub">Configure and mount an NFS export or Windows/SMB share to /hostapp.</p>
+    </div>
+    <div class="panel-body">
+      <form id="connectForm">
+        <div class="field">
+          <label for="protocol">Filesystem Protocol</label>
+          <select id="protocol" name="protocol">
+            <option value="nfs">NFS (Network File System)</option>
+            <option value="smb">SMB (Server Message Block / CIFS)</option>
+          </select>
+          <div class="hint" id="protocolHint">NFS mounts read-only at /hostapp. Use the export path configured on your NAS (e.g. TrueNAS).</div>
+        </div>
+
+        <div class="two">
+          <div class="field">
+            <label for="host">Server Hostname or IPv4</label>
+            <input id="host" name="host" placeholder="192.168.1.100" autocomplete="off" required>
+          </div>
+          <div class="field">
+            <label for="port">Network Port</label>
+            <input id="port" name="port" type="number" min="1" max="65535" placeholder="2049">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="remotePath" id="pathLabel">NFS Export Path</label>
+          <input id="remotePath" name="remotePath" placeholder="/mnt/dataPool/games" autocomplete="off" required>
+          <div class="hint" id="pathHint">Enter the exact absolute path exported by the NFS server.</div>
+        </div>
+
+        <div id="credentials" class="two" hidden>
+          <div class="field">
+            <label for="username">SMB Username</label>
+            <input id="username" name="username" placeholder="guest" autocomplete="username">
+          </div>
+          <div class="field">
+            <label for="password">SMB Password</label>
+            <input id="password" name="password" type="password" autocomplete="current-password">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="mountpoint">Console Target Mountpoint</label>
+          <input id="mountpoint" name="mountpoint" value="/hostapp" required readonly>
+          <div class="hint">For kernel and game execution safety, this payload manages only the /hostapp target.</div>
+        </div>
+
+        <div class="actions">
+          <button class="btn-primary" id="connectBtn" type="submit">Connect &amp; Mount</button>
+          <button class="btn-danger" id="disconnectBtn" type="button" disabled>Disconnect</button>
+          <button class="btn-secondary" id="refreshBtn" type="button">Refresh Status</button>
+        </div>
+      </form>
+
+      <div class="notice info show" id="notice" role="status" aria-live="polite">Payload daemon ready. Enter server details and press Connect &amp; Mount.</div>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <div class="panel-head">
+      <h2>Live Mount Diagnostics</h2>
+      <p class="sub">Kernel and FUSE state reported by the native PS5 payload.</p>
+    </div>
+    <div class="panel-body">
+      <div class="statbox pmgr-mono">
+        <div class="statrow"><span>Daemon API</span><strong id="apiStatus">Checking…</strong></div>
+        <div class="statrow"><span>Active Protocol</span><strong id="statusProtocol">—</strong></div>
+        <div class="statrow"><span>Remote Endpoint</span><strong id="endpoint">—</strong></div>
+        <div class="statrow"><span>Mount Location</span><strong id="mountpointStatus">/hostapp</strong></div>
+        <div class="statrow"><span>FUSE State</span><strong id="fsState">Unmounted</strong></div>
+        <div class="statrow"><span>Last Action</span><strong id="lastResult">Idle</strong></div>
+      </div>
+
+      <div class="warning-box">
+        <strong>Mount Execution Safety:</strong> Regular files on SMB and NFS are automatically mapped with execution permissions (0555) so PS5 game ELFs and PRXs run smoothly. Only /hostapp is modified.
+      </div>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  <div>PS5 Network Mounting · Prospero FUSE Engine · Based on libnfs &amp; libsmb2</div>
+  <div>Access from PS5 browser or LAN: <span class="pmgr-mono">http://&lt;ps5-ip&gt;:18080</span></div>
+</footer>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const form = $('connectForm'), protocol = $('protocol');
+  const defaultPorts = { nfs: 2049, smb: 445 };
+  const descriptions = {
+    nfs: [
+      'NFS Export Path',
+      '/mnt/dataPool/games',
+      'Enter the exact absolute path exported by the NFS server (e.g. /mnt/dataPool/games).',
+      'NFS mounts read-only at /hostapp. Use the export path configured on your NAS (e.g. TrueNAS).'
+    ],
+    smb: [
+      'SMB Share Name & Subpath',
+      'games/PS5',
+      'Enter the SMB share name, optionally followed by subfolder (e.g. games or games/PS5).',
+      'SMB mounts read-only at /hostapp. Use the SMB share name, not the NAS filesystem path.'
+    ]
+  };
+
+  function setNotice(message, kind = 'info') {
+    const n = $('notice');
+    n.textContent = message;
+    n.className = 'notice show ' + kind;
+  }
+
+  function updateProtocol() {
+    const p = protocol.value, d = descriptions[p];
+    $('pathLabel').textContent = d[0];
+    $('remotePath').placeholder = d[1];
+    $('pathHint').textContent = d[2];
+    $('protocolHint').textContent = d[3];
+    $('port').value = defaultPorts[p];
+    $('credentials').hidden = (p === 'nfs');
+    $('username').required = false;
+    $('password').required = false;
+    $('endpoint').textContent = computeEndpoint();
+  }
+
+  function computeEndpoint() {
+    const p = protocol.value, h = $('host').value.trim(), port = $('port').value;
+    const path = $('remotePath').value.trim();
+    if (!h) return '—';
+    const portStr = (port && Number(port) !== defaultPorts[p]) ? ':' + port : '';
+    return p + '://' + h + portStr + (p === 'smb' ? '/' : '') + path;
+  }
+
+  async function api(path, options = {}) {
+    const response = await fetch('/api/v1' + path, {
+      cache: 'no-store',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'PS5NM',
+        ...(options.headers || {})
+      }
+    });
+    const raw = await response.text();
+    let data = {};
+    try { data = raw ? JSON.parse(raw) : {}; }
+    catch { data = { message: raw || response.statusText }; }
+    if (!response.ok) throw new Error(data.message || data.error || ('HTTP ' + response.status));
+    return data;
+  }
+
+  function applyStatus(data) {
+    $('apiStatus').textContent = 'Online';
+    $('statusProtocol').textContent = data.protocol ? data.protocol.toUpperCase() : '—';
+    $('endpoint').textContent = data.endpoint || '—';
+    $('mountpointStatus').textContent = data.mountpoint || $('mountpoint').value || '/hostapp';
+    $('fsState').textContent = data.mounted ? 'Mounted (Active)' : 'Unmounted';
+    $('lastResult').textContent = data.last_error || data.last_result || 'Ready';
+
+    const pill = $('statusPill');
+    if (data.mounted) {
+      pill.innerHTML = '<span class="pmgr-live-dot"></span>Mounted';
+      pill.className = 'pill good';
+    } else {
+      pill.innerHTML = '<span class="pmgr-live-dot"></span>Ready';
+      pill.className = 'pill warn';
+    }
+    $('disconnectBtn').disabled = !(data.can_disconnect !== undefined ? data.can_disconnect : data.mounted);
+  }
+
+  async function refresh() {
+    try {
+      applyStatus(await api('/status'));
+    } catch (e) {
+      $('apiStatus').textContent = 'Offline';
+      const pill = $('statusPill');
+      pill.textContent = 'API Offline';
+      pill.className = 'pill bad';
+      $('disconnectBtn').disabled = true;
+      setNotice('Cannot connect to PS5 payload API: ' + e.message, 'error');
+    }
+  }
+
+  protocol.addEventListener('change', updateProtocol);
+  $('host').addEventListener('input', () => $('endpoint').textContent = computeEndpoint());
+  $('remotePath').addEventListener('input', () => $('endpoint').textContent = computeEndpoint());
+  $('port').addEventListener('input', () => $('endpoint').textContent = computeEndpoint());
+  $('refreshBtn').addEventListener('click', refresh);
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = $('connectBtn');
+    btn.disabled = true;
+    setNotice('Connecting and mounting filesystem…', 'info');
+
+    const body = {
+      protocol: protocol.value,
+      host: $('host').value.trim(),
+      port: Number($('port').value || defaultPorts[protocol.value]),
+      remote_path: $('remotePath').value.trim(),
+      mountpoint: $('mountpoint').value.trim(),
+      username: $('username').value,
+      password: $('password').value
+    };
+
+    try {
+      const result = await api('/mount', { method: 'POST', body: JSON.stringify(body) });
+      setNotice(result.message || 'Share successfully mounted at ' + body.mountpoint, 'ok');
+      await refresh();
+    } catch (err) {
+      setNotice('Mount failed: ' + err.message, 'error');
+      await refresh();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $('disconnectBtn').addEventListener('click', async () => {
+    $('disconnectBtn').disabled = true;
+    setNotice('Unmounting filesystem…', 'info');
+    try {
+      const result = await api('/unmount', { method: 'POST', body: JSON.stringify({ mountpoint: $('mountpoint').value.trim() }) });
+      setNotice(result.message || 'Share successfully disconnected.', 'ok');
+      await refresh();
+    } catch (err) {
+      setNotice('Disconnect failed: ' + err.message, 'error');
+      await refresh();
+    }
+  });
+
+  updateProtocol();
+  refresh();
+})();
+</script>
+</body>
+</html>
+)PS5NMHTML";
+}
