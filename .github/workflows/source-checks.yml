@@ -2,7 +2,7 @@ name: Source checks
 
 on:
   push:
-    branches: ["main", "dev/first-web-payload"]
+    branches: ["main", "dev/**", "chore/**"]
   pull_request:
   workflow_dispatch:
 
@@ -20,6 +20,10 @@ jobs:
         run: |
           python tools/embed_ui.py web/index.html /tmp/web_assets.hpp
           cmp native/web_assets.hpp /tmp/web_assets.hpp
+      - name: Compile and run JSON parser unit tests
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Inative tests/test_json.cpp -o /tmp/test_json
+          /tmp/test_json
       - name: Compile host API smoke-test binary
         run: |
           g++ -std=c++17 -O2 -Wall -Wextra -Inative native/main.cpp native/mount_backend.cpp tests/net_stubs.cpp -pthread -o /tmp/ps5nm-host
