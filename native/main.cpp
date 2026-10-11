@@ -1,6 +1,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/syscall.h>
 #include <sys/time.h>
 #include <unistd.h>
 #include <stdint.h>
@@ -32,10 +33,29 @@ struct NotifyRequest {
     char message[3075];
 };
 int sceKernelSendNotificationRequest(int, NotifyRequest*, unsigned long, int) __attribute__((weak));
+int sceNotificationSend(int user_id, bool is_logged_in, const char* payload) __attribute__((weak));
 int sceSystemServiceLaunchWebBrowser(const char* uri, void* reserved) __attribute__((weak));
+int sceUserServiceInitialize(void*) __attribute__((weak));
+int sceUserServiceTerminate(void) __attribute__((weak));
 }
 
 namespace {
+
+#ifdef SYS_sendsyslog
+#define PS5_SYS_SENDSYSLOG SYS_sendsyslog
+#else
+#define PS5_SYS_SENDSYSLOG 0x259
+#endif
+
+void LogKlog(const std::string &line) {
+    std::string trimmed = line.size() > 400 ? line.substr(0, 400) + "..." : line;
+    std::string msg = "<118>[PS5NM] " + trimmed + "\n";
+#if defined(__FreeBSD__) || defined(__ORBIS__) || defined(_ORBIS_)
+    (void)syscall(PS5_SYS_SENDSYSLOG, 7, msg.c_str(), 0);
+#endif
+    std::fprintf(stdout, "[PS5NM] %s\n", trimmed.c_str());
+    std::fflush(stdout);
+}
 
 std::string LocalIp() {
     std::string ip = "127.0.0.1";
@@ -58,50 +78,172 @@ std::string LocalIp() {
     return ip;
 }
 
-void SendPlainToast(const std::string &message) {
+bool InitUserService() {
+    typedef int (*UserServiceInitFn)(void*);
+    static UserServiceInitFn fn = nullptr;
+    static bool resolved = false;
+    static bool succeeded = false;
+    if (succeeded) return true;
+    if (!resolved) {
+        resolved = true;
+        if (sceUserServiceInitialize) {
+            fn = sceUserServiceInitialize;
+        } else {
+            fn = reinterpret_cast<UserServiceInitFn>(dlsym(RTLD_DEFAULT, "sceUserServiceInitialize"));
+            if (!fn) {
+                void* handle = dlopen("libSceUserService.sprx", RTLD_LAZY);
+                if (handle) {
+                    fn = reinterpret_cast<UserServiceInitFn>(dlsym(handle, "sceUserServiceInitialize"));
+                }
+            }
+        }
+    }
+    if (fn) {
+        int rc = fn(nullptr);
+        char buf[128];
+        std::snprintf(buf, sizeof(buf), "sceUserServiceInitialize rc=0x%08x (%d)", static_cast<unsigned>(rc), rc);
+        LogKlog(buf);
+        succeeded = (rc == 0 || rc == static_cast<int>(0x80550001));
+        return succeeded;
+    }
+    LogKlog("sceUserServiceInitialize symbol not found (continuing)");
+    return false;
+}
+
+bool SendPlainToastDirect(const std::string &message) {
     NotifyRequest req{};
     std::snprintf(req.message, sizeof(req.message), "%s", message.c_str());
-    if (sceKernelSendNotificationRequest) {
-        sceKernelSendNotificationRequest(0, &req, sizeof(req), 0);
-        return;
-    }
-    typedef int (*NotifyFn)(int, NotifyRequest*, unsigned long, int);
-    static NotifyFn fn = nullptr;
+    typedef int (*PlainNotifyFn)(int, NotifyRequest*, unsigned long, int);
+    static PlainNotifyFn fn = nullptr;
     static bool resolved = false;
     if (!resolved) {
         resolved = true;
-        fn = reinterpret_cast<NotifyFn>(dlsym(RTLD_DEFAULT, "sceKernelSendNotificationRequest"));
+        if (sceKernelSendNotificationRequest) {
+            fn = sceKernelSendNotificationRequest;
+        } else {
+            fn = reinterpret_cast<PlainNotifyFn>(dlsym(RTLD_DEFAULT, "sceKernelSendNotificationRequest"));
+        }
     }
     if (fn) {
-        fn(0, &req, sizeof(req), 0);
-    }
-}
-
-bool LaunchBrowser(const std::string &url) {
-    if (url.empty()) return false;
-    if (sceSystemServiceLaunchWebBrowser) {
-        int rc = sceSystemServiceLaunchWebBrowser(url.c_str(), nullptr);
+        int rc = fn(0, &req, sizeof(req), 0);
+        char buf[128];
+        std::snprintf(buf, sizeof(buf), "[notify] sceKernelSendNotificationRequest rc=0x%08x (%d)",
+                      static_cast<unsigned>(rc), rc);
+        LogKlog(buf);
         return rc >= 0;
     }
+    return false;
+}
+
+std::string JsonEscape(const std::string& value);
+
+bool SendRichToastDirect(const std::string &message) {
+    typedef int (*RichNotifyFn)(int, bool, const char*);
+    static RichNotifyFn fn = nullptr;
+    static bool resolved = false;
+    if (!resolved) {
+        resolved = true;
+        if (sceNotificationSend) {
+            fn = sceNotificationSend;
+        } else {
+            fn = reinterpret_cast<RichNotifyFn>(dlsym(RTLD_DEFAULT, "sceNotificationSend"));
+            if (!fn) {
+                void* handle = dlopen("libSceNotification.sprx", RTLD_LAZY);
+                if (handle) {
+                    fn = reinterpret_cast<RichNotifyFn>(dlsym(handle, "sceNotificationSend"));
+                }
+            }
+        }
+    }
+    if (!fn) return false;
+
+    std::string payload =
+        "{\"rawData\":{\"viewTemplateType\":\"InteractiveToastTemplateB\","
+        "\"channelType\":\"ServiceFeedback\",\"bundleName\":\"PS5 Network Mounting\","
+        "\"useCaseId\":\"IDC\",\"toastOverwriteType\":\"InQueue\",\"isImmediate\":true,\"priority\":100,"
+        "\"viewData\":{\"message\":{\"body\":\"" + JsonEscape(message) + "\"}}}}";
+    constexpr int kSystemUserId = 0xFE;
+    int rc = fn(kSystemUserId, true, payload.c_str());
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "[notify] sceNotificationSend rc=0x%08x (%d)",
+                  static_cast<unsigned>(rc), rc);
+    LogKlog(buf);
+    return rc == 0;
+}
+
+bool SendToastWithRetries(const std::string &message, int max_attempts = 5, int delay_ms = 500) {
+    if (message.empty()) return false;
+    for (int attempt = 1; attempt <= max_attempts; ++attempt) {
+        char buf[128];
+        std::snprintf(buf, sizeof(buf), "[notify] Attempt %d/%d sending toast: %s",
+                      attempt, max_attempts, message.c_str());
+        LogKlog(buf);
+
+        if (SendPlainToastDirect(message)) {
+            LogKlog("[notify] Toast delivered via sceKernelSendNotificationRequest");
+            return true;
+        }
+        if (SendRichToastDirect(message)) {
+            LogKlog("[notify] Toast delivered via sceNotificationSend");
+            return true;
+        }
+
+        if (attempt < max_attempts) {
+            usleep(delay_ms * 1000);
+        }
+    }
+    LogKlog("[notify] All toast notification attempts exhausted");
+    return false;
+}
+
+bool LaunchBrowserWithRetries(const std::string &url, int max_attempts = 5, int delay_ms = 1000) {
+    if (url.empty()) return false;
+    InitUserService();
+
     typedef int (*LaunchBrowserFn)(const char *uri, void *reserved);
     static LaunchBrowserFn fn = nullptr;
     static bool resolved = false;
     if (!resolved) {
         resolved = true;
-        fn = reinterpret_cast<LaunchBrowserFn>(dlsym(RTLD_DEFAULT, "sceSystemServiceLaunchWebBrowser"));
-        if (!fn) {
-            void *handle = dlopen("libSceSystemService.sprx", RTLD_LAZY);
-            if (handle) {
-                fn = reinterpret_cast<LaunchBrowserFn>(dlsym(handle, "sceSystemServiceLaunchWebBrowser"));
+        if (sceSystemServiceLaunchWebBrowser) {
+            fn = sceSystemServiceLaunchWebBrowser;
+        } else {
+            fn = reinterpret_cast<LaunchBrowserFn>(dlsym(RTLD_DEFAULT, "sceSystemServiceLaunchWebBrowser"));
+            if (!fn) {
+                void *handle = dlopen("libSceSystemService.sprx", RTLD_LAZY);
+                if (handle) {
+                    fn = reinterpret_cast<LaunchBrowserFn>(dlsym(handle, "sceSystemServiceLaunchWebBrowser"));
+                }
             }
         }
     }
-    if (fn) {
-        int rc = fn(url.c_str(), nullptr);
-        return rc >= 0;
+
+    if (!fn) {
+        LogKlog("[browser] sceSystemServiceLaunchWebBrowser symbol not found");
+        return false;
     }
+
+    for (int attempt = 1; attempt <= max_attempts; ++attempt) {
+        char buf[256];
+        int rc = fn(url.c_str(), nullptr);
+        std::snprintf(buf, sizeof(buf), "[browser] Attempt %d/%d: sceSystemServiceLaunchWebBrowser(\"%s\") rc=0x%08x (%d)",
+                      attempt, max_attempts, url.c_str(), static_cast<unsigned>(rc), rc);
+        LogKlog(buf);
+
+        if (rc >= 0) {
+            LogKlog("[browser] WebKit browser launched successfully");
+            return true;
+        }
+
+        if (attempt < max_attempts) {
+            usleep(delay_ms * 1000);
+        }
+    }
+
+    LogKlog("[browser] All WebKit launch attempts exhausted");
     return false;
 }
+
 constexpr unsigned int kDefaultPort = 18080;
 constexpr int kNetHeapSize = 5 * 1024 * 1024;
 constexpr size_t kMaxBody = 64 * 1024;
@@ -247,11 +389,18 @@ HttpResponse HandleRequest(const std::string& method, const std::string& raw_pat
     }
 
     if (method == "POST" && path == "/api/v1/browser") {
-        const std::string local_ip = LocalIp();
-        const std::string web_url = "http://" + local_ip + ":" + std::to_string(kDefaultPort);
-        const bool launched = LaunchBrowser(web_url);
+        ps5nm::JsonValue req;
+        std::string url;
+        if (ps5nm::JsonValue::Parse(body, req) && req.IsObject() && req.Has("url")) {
+            url = req.GetString("url");
+        }
+        if (url.empty()) {
+            const std::string local_ip = LocalIp();
+            url = "http://" + local_ip + ":" + std::to_string(kDefaultPort);
+        }
+        const bool launched = LaunchBrowserWithRetries(url, 3, 500);
         return {200, "application/json; charset=utf-8",
-                std::string("{\"ok\":") + (launched ? "true" : "false") + ",\"url\":" + Quote(web_url) + "}", ""};
+                std::string("{\"ok\":") + (launched ? "true" : "false") + ",\"url\":" + Quote(url) + "}", "Access-Control-Allow-Origin: *"};
     }
 
     if (method == "POST" && path == "/api/v1/notify") {
@@ -260,8 +409,9 @@ HttpResponse HandleRequest(const std::string& method, const std::string& raw_pat
         if (ps5nm::JsonValue::Parse(body, req) && req.IsObject() && req.Has("message")) {
             msg = req.GetString("message");
         }
-        SendPlainToast(msg);
-        return {200, "application/json; charset=utf-8", "{\"ok\":true}", ""};
+        const bool sent = SendToastWithRetries(msg, 3, 300);
+        return {200, "application/json; charset=utf-8",
+                std::string("{\"ok\":") + (sent ? "true" : "false") + ",\"message\":" + Quote(msg) + "}", "Access-Control-Allow-Origin: *"};
     }
 
     if (method == "POST" && path == "/api/v1/unmount") {
@@ -443,15 +593,43 @@ void* ClientWorker(void* arg) {
 }
 }
 
+struct StartupWorkerArgs {
+    std::string web_url;
+    std::string toast_message;
+};
+
+void* StartupWorker(void* arg) {
+    auto* args = reinterpret_cast<StartupWorkerArgs*>(arg);
+    LogKlog("[startup] Background startup worker began; waiting 300ms for system services to settle");
+    usleep(300 * 1000);
+
+    LogKlog("[startup] Sending startup notification toast");
+    SendToastWithRetries(args->toast_message, 5, 500);
+
+    LogKlog("[startup] Launching WebKit browser pointing to " + args->web_url);
+    LaunchBrowserWithRetries(args->web_url, 5, 1000);
+
+    delete args;
+    return nullptr;
+}
+
 int main() {
+    LogKlog("Initializing PS5 Network Mounting payload");
+
     int net_init_rc = sceNetInit();
     if (net_init_rc != 0) {
-        std::fprintf(stderr, "PS5 Network Mounting: sceNetInit returned %d (continuing)\n", net_init_rc);
+        char buf[128];
+        std::snprintf(buf, sizeof(buf), "sceNetInit returned %d (non-fatal, continuing)", net_init_rc);
+        LogKlog(buf);
     }
     const int net_pool = sceNetPoolCreate("ps5-network-mounting", kNetHeapSize, 0);
     if (net_pool < 0) {
-        std::fprintf(stderr, "PS5 Network Mounting: sceNetPoolCreate returned %d (continuing)\n", net_pool);
+        char buf[128];
+        std::snprintf(buf, sizeof(buf), "sceNetPoolCreate returned %d (non-fatal, continuing)", net_pool);
+        LogKlog(buf);
     }
+
+    InitUserService();
 
     unsigned int port = kDefaultPort;
     if (const char* env = std::getenv("PS5NM_PORT")) {
@@ -469,36 +647,96 @@ int main() {
     (void)signal(SIGPIPE, SIG_IGN);
     const int server = socket(AF_INET, SOCK_STREAM, 0);
     if (server < 0) {
-        std::fprintf(stderr, "PS5 Network Mounting: socket failed (%d)\n", errno);
+        char buf[128];
+        std::snprintf(buf, sizeof(buf), "socket creation failed (errno %d: %s)", errno, std::strerror(errno));
+        LogKlog(buf);
         (void)sceNetPoolDestroy(net_pool);
         return 2;
     }
     int reuse = 1;
     (void)setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+#ifdef SO_REUSEPORT
+    (void)setsockopt(server, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
+#endif
 #ifdef SO_NOSIGPIPE
     (void)setsockopt(server, SOL_SOCKET, SO_NOSIGPIPE, &reuse, sizeof(reuse));
 #endif
+
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(static_cast<uint16_t>(port));
-    if (inet_pton(AF_INET, bind_ip, &addr.sin_addr) != 1 ||
-        bind(server, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 ||
-        listen(server, 16) != 0) {
-        std::fprintf(stderr, "PS5 Network Mounting: bind/listen failed (%d)\n", errno);
+    if (inet_pton(AF_INET, bind_ip, &addr.sin_addr) != 1) {
+        LogKlog("inet_pton failed for bind_ip=" + std::string(bind_ip));
         close(server);
         (void)sceNetPoolDestroy(net_pool);
         return 3;
     }
 
+    bool bound = false;
+    constexpr int kMaxBindAttempts = 10;
+    for (int attempt = 1; attempt <= kMaxBindAttempts; ++attempt) {
+        if (bind(server, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0 &&
+            listen(server, 16) == 0) {
+            bound = true;
+            break;
+        }
+
+        int bind_err = errno;
+        char buf[192];
+        std::snprintf(buf, sizeof(buf), "bind/listen attempt %d/%d on %s:%u failed (errno %d: %s)",
+                      attempt, kMaxBindAttempts, bind_ip, port, bind_err, std::strerror(bind_err));
+        LogKlog(buf);
+
+        if (attempt < kMaxBindAttempts) {
+            usleep(500 * 1000);
+        }
+    }
+
     const std::string local_ip = LocalIp();
     const std::string web_url = "http://" + local_ip + ":" + std::to_string(port);
-    std::printf("PS5 Network Mounting listening on %s:%u (URL: %s)\n", bind_ip, port, web_url.c_str());
 
-    // Send toast notifications matching ProsperoMgr behavior
-    SendPlainToast("PS5 Network Mounting v1.1.0\nListening on: " + web_url);
+    if (!bound) {
+        LogKlog("bind/listen failed permanently on " + std::string(bind_ip) + ":" + std::to_string(port));
+        close(server);
 
-    // Launch the PS5 modal WebKit browser pointing to the web interface
-    LaunchBrowser(web_url);
+        // Check if port is already active (another instance running)
+        int probe = socket(AF_INET, SOCK_STREAM, 0);
+        bool already_running = false;
+        if (probe >= 0) {
+            sockaddr_in probe_addr{};
+            probe_addr.sin_family = AF_INET;
+            probe_addr.sin_port = htons(static_cast<uint16_t>(port));
+            inet_pton(AF_INET, "127.0.0.1", &probe_addr.sin_addr);
+            if (connect(probe, reinterpret_cast<sockaddr*>(&probe_addr), sizeof(probe_addr)) == 0) {
+                already_running = true;
+            }
+            close(probe);
+        }
+
+        if (already_running) {
+            LogKlog("Detected active server already running on port " + std::to_string(port) +
+                    ". Relaunching WebKit and sending notification.");
+            SendToastWithRetries("PS5 Network Mounting v1.1.1\nAlready active: " + web_url, 3, 500);
+            LaunchBrowserWithRetries(web_url, 5, 1000);
+            (void)sceNetPoolDestroy(net_pool);
+            return 0; // Clean exit without error
+        }
+
+        SendToastWithRetries("PS5 Network Mounting Error:\nPort " + std::to_string(port) + " in use!", 3, 500);
+        (void)sceNetPoolDestroy(net_pool);
+        return 3;
+    }
+
+    LogKlog("Listening on " + std::string(bind_ip) + ":" + std::to_string(port) + " (URL: " + web_url + ")");
+
+    // Spawn background startup worker to dispatch toast & browser without delaying the accept loop
+    auto* startup_args = new StartupWorkerArgs{web_url, "PS5 Network Mounting v1.1.1\nListening on: " + web_url};
+    pthread_t startup_tid;
+    if (pthread_create(&startup_tid, nullptr, StartupWorker, startup_args) == 0) {
+        pthread_detach(startup_tid);
+    } else {
+        StartupWorker(startup_args);
+    }
 
     for (;;) {
         sockaddr_in peer{};

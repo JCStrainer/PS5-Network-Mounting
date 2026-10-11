@@ -110,6 +110,19 @@ try:
     code, raw = request("/api/v1/unmount", "POST", {"mountpoint": "/hostapp"})
     assert code == 409 and json.loads(raw)["error"] == "unmount_failed"
 
+    # Browser launch endpoint
+    code, raw = request("/api/v1/browser", "POST", {})
+    assert code == 200
+    browser_resp = json.loads(raw)
+    assert browser_resp["ok"] is True
+    assert "url" in browser_resp
+
+    # Notification toast endpoint
+    code, raw = request("/api/v1/notify", "POST", {"message": "Test notification"})
+    assert code == 200
+    notify_resp = json.loads(raw)
+    assert notify_resp["ok"] is True
+
     print("HTTP smoke tests passed (host build with JSON parser and security checks).")
 finally:
     proc.terminate()

@@ -133,10 +133,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eux
-          TAG="v1.1.0"
-          TITLE="PS5 Network Mounting v1.1.0"
+          TAG="v1.1.1"
+          TITLE="PS5 Network Mounting v1.1.1"
           cat <<'NOTES' > /tmp/release_notes.md
-          ## PS5 Network Mounting v1.1.0
+          ## PS5 Network Mounting v1.1.1
+
+### Fixes & Diagnostics in v1.1.1
+- **Resilient Startup & Port Retries**: Added 10-attempt socket bind/listen retry loop with detailed klog diagnostics. Detects if port 18080 is already active from a previous execution, triggers WebKit/toast refresh, and exits cleanly.
+- **WebKit & Toast Startup Worker**: Decoupled WebKit browser launch and toast notifications into an asynchronous background worker with a 300ms settling pause and multi-attempt retry logic.
+- **UserService Initialization**: Explicitly initializes `sceUserService` prior to `sceSystemServiceLaunchWebBrowser`.
+- **Dual Toast Delivery**: Supports both plain `sceKernelSendNotificationRequest` and rich `sceNotificationSend` notifications.
+- **Kernel Syslog Diagnostics**: Emits `<118>[PS5NM]` diagnostic logs directly to PS5 klog via `sendsyslog`.
 
           ### Highlights & New Features
           - **Auto-open WebKit Browser**: On payload launch, automatically opens the PS5 WebKit browser modal pointing directly to the web UI at `http://<PS5-IP>:18080`.
