@@ -138,14 +138,14 @@ jobs:
           cat <<'NOTES' > /tmp/release_notes.md
           ## PS5 Network Mounting v1.1.1
 
-### Fixes & Diagnostics in v1.1.1
-- **Resilient Startup & Port Retries**: Added 10-attempt socket bind/listen retry loop with detailed klog diagnostics. Detects if port 18080 is already active from a previous execution, triggers WebKit/toast refresh, and exits cleanly.
-- **WebKit & Toast Startup Worker**: Decoupled WebKit browser launch and toast notifications into an asynchronous background worker with a 300ms settling pause and multi-attempt retry logic.
-- **UserService Initialization**: Explicitly initializes `sceUserService` prior to `sceSystemServiceLaunchWebBrowser`.
-- **Dual Toast Delivery**: Supports both plain `sceKernelSendNotificationRequest` and rich `sceNotificationSend` notifications.
-- **Kernel Syslog Diagnostics**: Emits `<118>[PS5NM]` diagnostic logs directly to PS5 klog via `sendsyslog`.
+          ### Fixes & Diagnostics in v1.1.1
+          - **Resilient Startup & Port Retries**: Added 10-attempt socket bind/listen retry loop with detailed klog diagnostics. Detects if port 18080 is already active from a previous execution, triggers WebKit/toast refresh, and exits cleanly.
+          - **WebKit & Toast Startup Worker**: Decoupled WebKit browser launch and toast notifications into an asynchronous background worker with a 300ms settling pause and multi-attempt retry logic.
+          - **UserService Initialization**: Explicitly initializes `sceUserService` prior to `sceSystemServiceLaunchWebBrowser`.
+          - **Dual Toast Delivery**: Supports both plain `sceKernelSendNotificationRequest` and rich `sceNotificationSend` notifications.
+          - **Kernel Syslog Diagnostics**: Emits `<118>[PS5NM]` diagnostic logs directly to PS5 klog via `sendsyslog`.
 
-          ### Highlights & New Features
+          ### Highlights & Core Capabilities
           - **Auto-open WebKit Browser**: On payload launch, automatically opens the PS5 WebKit browser modal pointing directly to the web UI at `http://<PS5-IP>:18080`.
           - **On-Screen PS5 Toast Notification**: Displays a ProsperoMgr-style on-screen notification showing the payload version and listening network address and port.
           - **Background Daemon**: Resilient network initialization that keeps running smoothly even if `sceNetInit` was already initialized by the payload loader.
