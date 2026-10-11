@@ -17,6 +17,10 @@ The daemon includes an embedded, high-performance HTTP server serving a modern w
 
 ## Key Features
 
+- **Console Integration & UX (ProsperoMgr Style):**
+  - **Automatic WebKit Browser Launch:** On loading the ELF payload, the daemon automatically launches the PS5 modal WebKit browser pointing directly to `http://<PS5-IP>:18080`, giving immediate control on your TV screen without manual URL entry.
+  - **On-Screen PS5 Toast Notifications:** Displays native on-screen toast notifications upon startup showing the payload version and the local network listening URL (`http://<PS5-IP>:18080`).
+  - **Resilient Network Daemon:** Recovers gracefully if `sceNetInit` or net pools are already initialized by your payload launcher or earlier homebrew.
 - **Supported Protocols:**
   - **NFS (v3/v4):** Backed by `libnfs` and a low-latency PS5 FUSE adapter. Connects directly to TrueNAS, Synology, QNAP, or Linux exports.
   - **SMB2 / SMB3:** Backed by `libsmb2` and a dedicated FUSE adapter with guest and authenticated session support.

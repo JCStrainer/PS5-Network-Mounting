@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ps5-full-mount-targeted-${{ github.event.pull_request.number || github.ref }}
@@ -126,3 +126,32 @@ jobs:
             build/PS5NetworkMounting.elf
           if-no-files-found: error
           retention-days: 14
+
+      - name: Create or update GitHub Release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eux
+          TAG="v1.1.0"
+          TITLE="PS5 Network Mounting v1.1.0"
+          BODY="## PS5 Network Mounting v1.1.0
+
+### Highlights & New Features
+- **Auto-open WebKit Browser**: On payload launch, automatically opens the PS5 WebKit browser modal pointing directly to the web UI at \`http://<PS5-IP>:18080\`.
+- **On-Screen PS5 Toast Notification**: Displays a ProsperoMgr-style on-screen notification showing the payload version and listening network address and port.
+- **Background Daemon**: Resilient network initialization that keeps running smoothly even if \`sceNetInit\` was already initialized by the payload loader.
+- **Full NFS & SMB FUSE Mount**: Support for NFS (v3/v4) and SMB (SMB2/SMB3) network shares mounted to \`/hostapp\` or designated mount paths.
+- **ProsperoMgr-inspired Dark Theme UI**: Full remote control from PS5 browser or PC/phone on the LAN.
+
+### Included Artifacts
+- \`PS5NetworkMounting.elf\`: Full standalone PS5 homebrew payload with NFS and SMB FUSE adapters included."
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists. Updating release notes and assets..."
+            gh release edit "$TAG" --title "$TITLE" --notes "$BODY"
+            gh release upload "$TAG" build/PS5NetworkMounting.elf --clobber
+          else
+            echo "Creating release $TAG..."
+            gh release create "$TAG" build/PS5NetworkMounting.elf --title "$TITLE" --notes "$BODY"
+          fi
